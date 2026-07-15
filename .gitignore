@@ -1,0 +1,24 @@
+# ltxpng .gitignore
+
+# Build artifacts
+ltxpng
+*.o
+src/*.o
+
+# Test binaries
+tests/test_util
+tests/test_args
+tests/test_detect
+tests/test_template
+tests/test_run
+
+# Editor/IDE
+.DS_Store
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Temp files
+/tmp/ltxpng_*
