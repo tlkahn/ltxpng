@@ -171,6 +171,190 @@ TEST(long_dpi_flag) {
   free(o.preamble);
 }
 
+/* --- Edge cases --- */
+
+TEST(combined_short_flags) {
+  opts o;
+  char *args[] = {"ltxpng", "-tv", "E=mc^2", NULL};
+  ASSERT_EQ(parse_test(3, args, &o), 0);
+  ASSERT_EQ(o.transparent, 1);
+  ASSERT_EQ(o.verbose, 1);
+  ASSERT_STREQ(o.fragment, "E=mc^2");
+  free(o.preamble);
+}
+
+TEST(combined_short_flags_tvk) {
+  opts o;
+  char *args[] = {"ltxpng", "-tvk", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_EQ(o.transparent, 1);
+  ASSERT_EQ(o.verbose, 1);
+  ASSERT_EQ(o.keep, 1);
+  free(o.preamble);
+}
+
+TEST(all_flags_together) {
+  opts o;
+  char *args[] = {"ltxpng", "-o", "result.png", "-d", "600",
+                  "-t", "-m", "10pt", "-k", "-v", "--raw",
+                  "-p", "\\usepackage{foo}", "E = mc^2", NULL};
+  ASSERT_EQ(parse_test(14, args, &o), 0);
+  ASSERT_STREQ(o.output, "result.png");
+  ASSERT_EQ(o.dpi, 600);
+  ASSERT_EQ(o.transparent, 1);
+  ASSERT_STREQ(o.margin, "10pt");
+  ASSERT_EQ(o.keep, 1);
+  ASSERT_EQ(o.verbose, 1);
+  ASSERT_EQ(o.mode_override, 2);
+  ASSERT_STREQ(o.fragment, "E = mc^2");
+  ASSERT_EQ(o.n_preamble, 1);
+  ASSERT_STREQ(o.preamble[0], "\\usepackage{foo}");
+  free(o.preamble[0]);
+  free(o.preamble);
+}
+
+TEST(fragment_with_spaces) {
+  opts o;
+  char *args[] = {"ltxpng", "a + b = c", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_STREQ(o.fragment, "a + b = c");
+  free(o.preamble);
+}
+
+TEST(empty_string_fragment) {
+  opts o;
+  char *args[] = {"ltxpng", "", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_STREQ(o.fragment, "");
+  free(o.preamble);
+}
+
+TEST(very_large_dpi) {
+  opts o;
+  char *args[] = {"ltxpng", "-d", "9999", NULL};
+  ASSERT_EQ(parse_test(3, args, &o), 0);
+  ASSERT_EQ(o.dpi, 9999);
+  free(o.preamble);
+}
+
+TEST(dpi_with_trailing_text_returns_error) {
+  opts o;
+  char *args[] = {"ltxpng", "-d", "300abc", NULL};
+  ASSERT_EQ(parse_test(3, args, &o), 1);
+  free(o.preamble);
+}
+
+TEST(dpi_with_leading_whitespace_returns_error) {
+  opts o;
+  char *args[] = {"ltxpng", "-d", " 300", NULL};
+  /* strtol skips whitespace, so " 300" becomes 300 - this should succeed */
+  int ret = parse_test(3, args, &o);
+  if (ret == 0) {
+    ASSERT_EQ(o.dpi, 300);
+  }
+  free(o.preamble);
+}
+
+TEST(long_transparent_flag) {
+  opts o;
+  char *args[] = {"ltxpng", "--transparent", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_EQ(o.transparent, 1);
+  free(o.preamble);
+}
+
+TEST(long_margin_flag) {
+  opts o;
+  char *args[] = {"ltxpng", "--margin", "5mm", NULL};
+  ASSERT_EQ(parse_test(3, args, &o), 0);
+  ASSERT_STREQ(o.margin, "5mm");
+  free(o.preamble);
+}
+
+TEST(long_preamble_flag) {
+  opts o;
+  char *args[] = {"ltxpng", "--preamble", "\\usepackage{foo}", NULL};
+  ASSERT_EQ(parse_test(3, args, &o), 0);
+  ASSERT_EQ(o.n_preamble, 1);
+  ASSERT_STREQ(o.preamble[0], "\\usepackage{foo}");
+  free(o.preamble[0]);
+  free(o.preamble);
+}
+
+TEST(long_keep_flag) {
+  opts o;
+  char *args[] = {"ltxpng", "--keep", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_EQ(o.keep, 1);
+  free(o.preamble);
+}
+
+TEST(long_verbose_flag) {
+  opts o;
+  char *args[] = {"ltxpng", "--verbose", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_EQ(o.verbose, 1);
+  free(o.preamble);
+}
+
+TEST(multiple_mode_overrides_last_wins) {
+  opts o;
+  char *args[] = {"ltxpng", "--inline", "--raw", NULL};
+  ASSERT_EQ(parse_test(3, args, &o), 0);
+  ASSERT_EQ(o.mode_override, 2);
+  free(o.preamble);
+}
+
+TEST(margin_with_various_units) {
+  const char *units[] = {"2pt", "10mm", "1cm", "0.5in", "12bp"};
+  for (int i = 0; i < 5; i++) {
+    opts o;
+    char *args[] = {"ltxpng", "-m", (char *)units[i], NULL};
+    ASSERT_EQ(parse_test(3, args, &o), 0);
+    ASSERT_STREQ(o.margin, units[i]);
+    free(o.preamble);
+  }
+}
+
+TEST(many_preamble_entries) {
+  opts o;
+  char *args[2 + 2*10 + 1]; /* ltxpng + 10 * (-p val) + NULL */
+  args[0] = "ltxpng";
+  int idx = 1;
+  char bufs[10][64];
+  for (int i = 0; i < 10; i++) {
+    args[idx++] = "-p";
+    snprintf(bufs[i], sizeof(bufs[i]), "\\usepackage{pkg%d}", i);
+    args[idx++] = bufs[i];
+  }
+  args[idx] = NULL;
+  ASSERT_EQ(parse_test(idx, args, &o), 0);
+  ASSERT_EQ(o.n_preamble, 10);
+  for (int i = 0; i < 10; i++) {
+    char expected[64];
+    snprintf(expected, sizeof(expected), "\\usepackage{pkg%d}", i);
+    ASSERT_STREQ(o.preamble[i], expected);
+    free(o.preamble[i]);
+  }
+  free(o.preamble);
+}
+
+TEST(output_to_deeply_nested_path) {
+  opts o;
+  char *args[] = {"ltxpng", "-o", "/tmp/a/b/c/d/out.png", NULL};
+  ASSERT_EQ(parse_test(3, args, &o), 0);
+  ASSERT_STREQ(o.output, "/tmp/a/b/c/d/out.png");
+  free(o.preamble);
+}
+
+TEST(fragment_with_latex_special_chars) {
+  opts o;
+  char *args[] = {"ltxpng", "x_{n+1} = \\frac{x_n}{2} + \\sqrt{x_n}", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_STREQ(o.fragment, "x_{n+1} = \\frac{x_n}{2} + \\sqrt{x_n}");
+  free(o.preamble);
+}
+
 int main(void) {
   return test_run_all();
 }

@@ -139,6 +139,155 @@ TEST(mode_override_raw_wraps_verbatim) {
   sb_free(&b);
 }
 
+/* --- Edge cases --- */
+
+TEST(empty_fragment_display_mode) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  build_template(&b, "", FRAG_DISPLAY, "2pt", -1, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, "\\[\\]");
+  ASSERT_STRCONTAINS(b.buf, "\\begin{document}");
+  ASSERT_STRCONTAINS(b.buf, "\\end{document}");
+  sb_free(&b);
+}
+
+TEST(empty_fragment_inline_mode) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  build_template(&b, "", FRAG_DISPLAY, "2pt", 0, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, "$$");
+  sb_free(&b);
+}
+
+TEST(multiline_fragment_display) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  const char *frag = "a &= b + c \\\\\n  &= d + e";
+  build_template(&b, frag, FRAG_DISPLAY, "2pt", -1, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, frag);
+  sb_free(&b);
+}
+
+TEST(fragment_with_percent_signs) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  build_template(&b, "50\\% tax", FRAG_DISPLAY, "2pt", -1, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, "50\\% tax");
+  sb_free(&b);
+}
+
+TEST(large_margin_value) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  build_template(&b, "x", FRAG_DISPLAY, "100mm", -1, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, "border=100mm");
+  sb_free(&b);
+}
+
+TEST(zero_auto_pkgs_with_user_preamble) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {"\\usepackage{hyperref}"};
+  build_template(&b, "x", FRAG_DISPLAY, "2pt", -1, pkgs, 0, user, 1);
+  ASSERT_STRCONTAINS(b.buf, "\\usepackage{hyperref}");
+  ASSERT_TRUE(strstr(b.buf, "\\usepackage{tikz}") == NULL);
+  sb_free(&b);
+}
+
+TEST(document_structure_ordering) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {"tikz"};
+  const char *user[] = {"\\newcommand{\\foo}{bar}"};
+  build_template(&b, "test", FRAG_DISPLAY, "5pt", -1, pkgs, 1, user, 1);
+
+  const char *docclass = strstr(b.buf, "\\documentclass");
+  const char *amsmath = strstr(b.buf, "\\usepackage{amsmath");
+  const char *tikzpkg = strstr(b.buf, "\\usepackage{tikz}");
+  const char *usercmd = strstr(b.buf, "\\newcommand");
+  const char *begdoc = strstr(b.buf, "\\begin{document}");
+  const char *body = strstr(b.buf, "\\[test\\]");
+  const char *enddoc = strstr(b.buf, "\\end{document}");
+
+  ASSERT_TRUE(docclass != NULL);
+  ASSERT_TRUE(amsmath != NULL && amsmath > docclass);
+  ASSERT_TRUE(tikzpkg != NULL && tikzpkg > amsmath);
+  ASSERT_TRUE(usercmd != NULL && usercmd > tikzpkg);
+  ASSERT_TRUE(begdoc != NULL && begdoc > usercmd);
+  ASSERT_TRUE(body != NULL && body > begdoc);
+  ASSERT_TRUE(enddoc != NULL && enddoc > body);
+  sb_free(&b);
+}
+
+TEST(mode_override_display_on_raw_kind) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  build_template(&b, "\\begin{equation}x\\end{equation}",
+                 FRAG_RAW, "2pt", 1, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, "\\[\\begin{equation}x\\end{equation}\\]");
+  sb_free(&b);
+}
+
+TEST(mode_override_inline_on_raw_kind) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  build_template(&b, "x^2", FRAG_RAW, "2pt", 0, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, "$x^2$");
+  sb_free(&b);
+}
+
+TEST(fulldoc_ignores_all_template_options) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {"tikz", "algpseudocode"};
+  const char *user[] = {"\\usepackage{custom}"};
+  const char *frag = "\\documentclass{beamer}\n\\begin{document}\nHi\n\\end{document}";
+  build_template(&b, frag, FRAG_FULLDOC, "99pt", 0, pkgs, 2, user, 1);
+  ASSERT_STREQ(b.buf, frag);
+  sb_free(&b);
+}
+
+TEST(multiple_user_preamble_entries_order) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {"\\usepackage{a}", "\\usepackage{b}", "\\usepackage{c}"};
+  build_template(&b, "x", FRAG_DISPLAY, "2pt", -1, pkgs, 0, user, 3);
+
+  const char *a = strstr(b.buf, "\\usepackage{a}");
+  const char *bb = strstr(b.buf, "\\usepackage{b}");
+  const char *c = strstr(b.buf, "\\usepackage{c}");
+  ASSERT_TRUE(a != NULL && bb != NULL && c != NULL);
+  ASSERT_TRUE(a < bb && bb < c);
+  sb_free(&b);
+}
+
+TEST(fragment_with_braces_and_backslashes) {
+  sb b;
+  sb_init(&b);
+  const char *pkgs[] = {};
+  const char *user[] = {};
+  const char *frag = "\\left\\{ \\frac{1}{2} \\right\\}";
+  build_template(&b, frag, FRAG_DISPLAY, "2pt", -1, pkgs, 0, user, 0);
+  ASSERT_STRCONTAINS(b.buf, frag);
+  sb_free(&b);
+}
+
 int main(void) {
   return test_run_all();
 }

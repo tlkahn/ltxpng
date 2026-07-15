@@ -95,10 +95,18 @@ int main(int argc, char *argv[]) {
     /* Read stdin */
     size_t len;
     fragment = read_all(stdin, &len);
-    if (!fragment) { fprintf(stderr, "error: empty stdin\n"); return 1; }
+    if (!fragment || len == 0) {
+      fprintf(stderr, "error: empty stdin\n");
+      free(fragment);
+      return 1;
+    }
     free_fragment = 1;
-    /* Chomp trailing newline for clean wrapping */
     chomp(fragment);
+    if (fragment[0] == '\0') {
+      fprintf(stderr, "error: empty stdin\n");
+      free(fragment);
+      return 1;
+    }
   }
 
   /* Classify fragment */

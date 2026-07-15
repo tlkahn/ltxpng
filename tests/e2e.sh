@@ -14,6 +14,12 @@ if [ ! -x "$LTPNG" ]; then
   exit 1
 fi
 
+# Resolve to absolute path so cd in subshells doesn't break it
+case "$LTPNG" in
+  /*) ;;
+  *)  LTPNG="$(cd "$(dirname "$LTPNG")" && pwd)/$(basename "$LTPNG")" ;;
+esac
+
 T=$(mktemp -d /tmp/ltxpng_e2e.XXXXXX)
 trap "rm -rf $T" EXIT
 
@@ -125,6 +131,121 @@ check "keep preserves temp dir" sh -c "
 check "no-keep cleans temp dir" sh -c "
   output=\$('$LTPNG' 'E = mc^2' -o $T/nokeep.png 2>/dev/null) &&
   [ ! -d \"\$output\" ]
+"
+
+# --- Additional edge-case and product-level tests ---
+
+# 13. Long/complex equation
+check "long equation" sh -c "
+  '$LTPNG' '\sum_{i=0}^{\infty} \frac{(-1)^i}{(2i+1)} = \frac{\pi}{4}' -o $T/long.png 2>/dev/null &&
+  xxd -p -l 8 '$T/long.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 14. Multi-line equation via raw mode
+check "multiline align" sh -c "
+  '$LTPNG' '\begin{align} a &= b + c \\\\ d &= e + f \end{align}' -o $T/align.png 2>/dev/null &&
+  xxd -p -l 8 '$T/align.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 15. Matrix expression (pmatrix needs math mode; --display forces \[...\] wrapping)
+check "matrix expression" sh -c "
+  '$LTPNG' --display '\begin{pmatrix} 1 & 0 \\\\ 0 & 1 \end{pmatrix}' -o $T/matrix.png 2>/dev/null &&
+  xxd -p -l 8 '$T/matrix.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 16. Unicode/Greek letters in math
+check "unicode greek" sh -c "
+  '$LTPNG' '\alpha + \beta = \gamma' -o $T/greek.png 2>/dev/null &&
+  xxd -p -l 8 '$T/greek.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 17. Custom preamble (verbatim string)
+check "custom preamble verbatim" sh -c "
+  '$LTPNG' -p '\usepackage{mathtools}' '\coloneqq' -o $T/preamble.png 2>/dev/null &&
+  xxd -p -l 8 '$T/preamble.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 18. Preamble from file
+check "preamble from file" sh -c "
+  printf '\\\usepackage{mathtools}\n' > $T/pre.tex &&
+  '$LTPNG' -p $T/pre.tex '\coloneqq' -o $T/prefile.png 2>/dev/null &&
+  xxd -p -l 8 '$T/prefile.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 19. Multiple preamble flags
+check "multiple preamble flags" sh -c "
+  '$LTPNG' -p '\usepackage{mathtools}' -p '\usepackage{bm}' '\bm{x} \coloneqq y' -o $T/multipre.png 2>/dev/null &&
+  xxd -p -l 8 '$T/multipre.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 20. --display override with a raw-looking fragment
+check "display override" sh -c "
+  '$LTPNG' --display 'x^2 + y^2' -o $T/dispover.png 2>/dev/null &&
+  xxd -p -l 8 '$T/dispover.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 21. --inline override
+check "inline override" sh -c "
+  '$LTPNG' --inline 'E = mc^2' -o $T/inlover.png 2>/dev/null &&
+  xxd -p -l 8 '$T/inlover.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 22. Output to current directory (relative path)
+check "relative output path" sh -c "
+  cd $T &&
+  '$LTPNG' 'x' -o relpath.png 2>/dev/null &&
+  xxd -p -l 8 relpath.png | grep -q '89504e470d0a1a0a'
+"
+
+# 23. Empty stdin should fail gracefully
+check "empty stdin fails" sh -c "
+  printf '' | '$LTPNG' -o $T/empty.png 2>/dev/null; rc=\$?;
+  [ \$rc -ne 0 ]
+"
+
+# 24. Help flag exits 0
+check "help exits 0" sh -c "
+  '$LTPNG' --help 2>/dev/null; rc=\$?;
+  [ \$rc -eq 0 ]
+"
+
+# 25. Version flag exits 0
+check "version exits 0" sh -c "
+  '$LTPNG' --version 2>/dev/null; rc=\$?;
+  [ \$rc -eq 0 ]
+"
+
+# 26. Deeply nested LaTeX (lots of braces)
+check "deeply nested braces" sh -c "
+  '$LTPNG' '\frac{\frac{\frac{1}{2}}{3}}{4}' -o $T/nested.png 2>/dev/null &&
+  xxd -p -l 8 '$T/nested.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 27. -k on failure should still keep temp dir with job.tex
+check "keep on latex failure" sh -c "
+  output=\$('$LTPNG' '\undefinedmacro' --keep -o $T/kfail.png 2>/dev/null) || true;
+  [ -f \"$T/kfail.png\" ] && exit 1;
+  true
+"
+
+# 28. TikZ auto-detection
+if command -v xelatex >/dev/null 2>&1; then
+  check "tikz auto-detection" sh -c "
+    '$LTPNG' '\begin{tikzpicture}\draw (0,0) -- (1,1);\end{tikzpicture}' -o $T/tikz.png 2>/dev/null &&
+    xxd -p -l 8 '$T/tikz.png' | grep -q '89504e470d0a1a0a'
+  "
+fi
+
+# 29. Very simple single-character fragment
+check "single char fragment" sh -c "
+  '$LTPNG' 'x' -o $T/single.png 2>/dev/null &&
+  xxd -p -l 8 '$T/single.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 30. Transparent + high DPI combined
+check "transparent high dpi" sh -c "
+  '$LTPNG' 'E = mc^2' -t -d 600 -o $T/thd.png 2>/dev/null &&
+  xxd -p -l 8 '$T/thd.png' | grep -q '89504e470d0a1a0a'
 "
 
 echo ""

@@ -54,6 +54,41 @@ extern int test_assert_failures;
   }                                                             \
 } while (0)
 
+#define ASSERT_STRCONTAINS(haystack, needle) do {               \
+  const char *_h = (haystack);                                  \
+  const char *_n = (needle);                                    \
+  if (!_h || !_n || strstr(_h, _n) == NULL) {                   \
+    fprintf(stderr,                                             \
+      "  FAIL at %s:%d: ASSERT_STRCONTAINS(%s, %s)\n",          \
+            __FILE__, __LINE__, #haystack, #needle);            \
+    fprintf(stderr, "    \"%s\" not found in \"%s\"\n",         \
+            _n ? _n : "(null)",                                 \
+            _h ? (strlen(_h) > 200 ? "(long string)" : _h)     \
+               : "(null)");                                     \
+    (*fail)++;                                                  \
+    return;                                                     \
+  }                                                             \
+} while (0)
+
+#define ASSERT_NULL(ptr) do {                                   \
+  if ((ptr) != NULL) {                                          \
+    fprintf(stderr, "  FAIL at %s:%d: ASSERT_NULL(%s)\n",        \
+            __FILE__, __LINE__, #ptr);                          \
+    (*fail)++;                                                  \
+    return;                                                     \
+  }                                                             \
+} while (0)
+
+#define ASSERT_NEQ(a, b) do {                                   \
+  if ((a) == (b)) {                                             \
+    fprintf(stderr, "  FAIL at %s:%d: ASSERT_NEQ(%s, %s)\n",    \
+            __FILE__, __LINE__, #a, #b);                        \
+    fprintf(stderr, "    both are %lld\n", (long long)(a));     \
+    (*fail)++;                                                  \
+    return;                                                     \
+  }                                                             \
+} while (0)
+
 /* Test runner internals */
 typedef void (*test_fn)(int *, int *);
 
