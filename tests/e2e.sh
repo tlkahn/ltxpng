@@ -272,6 +272,41 @@ EOF
     '$LTPNG' -o $T/algo_uc.png < $T/algo_uc.in 2>/dev/null &&
     xxd -p -l 8 '$T/algo_uc.png' | grep -q '89504e470d0a1a0a'
   "
+
+  # Full original bug-report algorithm (all uppercase control flow)
+  cat > "$T/algo_full.in" << 'EOF'
+\begin{algorithm}
+\caption{Hardware-Aware Prefix Scheduler}
+\begin{algorithmic}[1]
+\REQUIRE Active requests $r \in \{1, \ldots, R\}$; confidence sequence $c_{r,1}, \ldots, c_{r,\gamma}$ per request; profiled step curve $\mathrm{SPS}(B)$
+\ENSURE Selected per-request prefix lengths $\ell_1^*, \ldots, \ell_R^*$
+
+\FOR{$r = 1$ to $R$}
+    \STATE Compute prefix survival probabilities: $a_{r,j} \leftarrow \prod_{i \leqslant j} c_{r,i}$ for $j = 1, \ldots, \gamma$
+\ENDFOR
+
+\STATE Construct candidate space $E \leftarrow \{(r,j) \mid a_{r,j} > 0\}$ and sort descending by $a_{r,j}$
+\STATE Initialize states: $\ell_r \leftarrow 0$ for all $r$; Batch size $B \leftarrow R$; Expected accepts $\tau^* \leftarrow R$
+\STATE Initialize tracking: $\Theta_{best} \leftarrow R \cdot \mathrm{SPS}(R)$; Selected lengths $\ell_r^* \leftarrow 0$ for all $r$
+
+\FOR{each $(r,j) \in E$ in sorted order}
+    \STATE $\ell_r \leftarrow j$; \quad $B \leftarrow B + 1$; \quad $\tau^* \leftarrow \tau^* + a_{r,j}$
+    \STATE Current throughput $\Theta \leftarrow \tau^* \cdot \mathrm{SPS}(B)$
+    \IF{$\Theta > \Theta_{best}$}
+        \STATE $\Theta_{best} \leftarrow \Theta$; \quad Update selected lengths $\ell_r^* \leftarrow \ell_r$
+    \ELSE
+        \STATE \textbf{break}
+    \ENDIF
+\ENDFOR
+
+\RETURN $(\ell_1^*, \ldots, \ell_R^*)$ achieving $\Theta_{best}$
+\end{algorithmic}
+\end{algorithm}
+EOF
+  check "full uppercase algorithmic algorithm" sh -c "
+    '$LTPNG' -o $T/algo_full.png < $T/algo_full.in 2>/dev/null &&
+    xxd -p -l 8 '$T/algo_full.png' | grep -q '89504e470d0a1a0a'
+  "
 fi
 
 echo ""
