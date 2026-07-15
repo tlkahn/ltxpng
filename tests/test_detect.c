@@ -43,60 +43,58 @@ TEST(empty_fragment_classifies_as_display) {
 /* --- Package detection --- */
 
 TEST(algpseudocode_detected_from_begin_algorithmic) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("\\begin{algorithmic}", &n, pkgs, 5);
-  ASSERT_EQ(n, 1);
-  ASSERT_STREQ(pkgs[0], "algpseudocode");
+  detect_result res;
+  detect_packages("\\begin{algorithmic}", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algpseudocode");
 }
 
 TEST(algpseudocode_detected_from_State) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("\\State something", &n, pkgs, 5);
-  ASSERT_EQ(n, 1);
-  ASSERT_STREQ(pkgs[0], "algpseudocode");
+  detect_result res;
+  detect_packages("\\State something", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algpseudocode");
 }
 
 TEST(algorithm_detected) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("\\begin{algorithm}", &n, pkgs, 5);
-  ASSERT_EQ(n, 1);
-  ASSERT_STREQ(pkgs[0], "algorithm");
+  detect_result res;
+  detect_packages("\\begin{algorithm}", &res);
+  ASSERT_EQ(res.n_pkgs, 2);
+  ASSERT_STREQ(res.pkgs[0], "algorithm");
+  ASSERT_STREQ(res.pkgs[1], "float");
+  ASSERT_EQ(res.n_extra, 2);
+  ASSERT_STREQ(res.extra_preamble[0], "\\floatplacement{algorithm}{H}");
+  /* second extra line redefines algorithm as non-float for standalone */
+  ASSERT_TRUE(strstr(res.extra_preamble[1], "\\newenvironment{algorithm}") != NULL);
 }
 
 TEST(tikz_detected) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("\\begin{tikzpicture}", &n, pkgs, 5);
-  ASSERT_EQ(n, 1);
-  ASSERT_STREQ(pkgs[0], "tikz");
+  detect_result res;
+  detect_packages("\\begin{tikzpicture}", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "tikz");
 }
 
 TEST(plain_math_yields_no_packages) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("E = mc^2", &n, pkgs, 5);
-  ASSERT_EQ(n, 0);
+  detect_result res;
+  detect_packages("E = mc^2", &res);
+  ASSERT_EQ(res.n_pkgs, 0);
 }
 
 TEST(duplicate_packages_not_repeated) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("\\begin{algorithmic} \\State \\begin{algorithmic}", &n, pkgs, 5);
-  ASSERT_EQ(n, 1);
-  ASSERT_STREQ(pkgs[0], "algpseudocode");
+  detect_result res;
+  detect_packages("\\begin{algorithmic} \\State \\begin{algorithmic}", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algpseudocode");
 }
 
 TEST(multiple_packages_detected) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("\\begin{algorithmic} \\begin{tikzpicture} \\State", &n, pkgs, 5);
-  ASSERT_EQ(n, 2);
+  detect_result res;
+  detect_packages("\\begin{algorithmic} \\begin{tikzpicture} \\State", &res);
+  ASSERT_EQ(res.n_pkgs, 2);
   /* Order depends on table order: algpseudocode first (two triggers), tikz second */
-  ASSERT_STREQ(pkgs[0], "algpseudocode");
-  ASSERT_STREQ(pkgs[1], "tikz");
+  ASSERT_STREQ(res.pkgs[0], "algpseudocode");
+  ASSERT_STREQ(res.pkgs[1], "tikz");
 }
 
 /* --- Edge cases: classification --- */
@@ -153,39 +151,138 @@ TEST(documentclass_in_comment_still_detected) {
 /* --- Edge cases: package detection --- */
 
 TEST(State_as_substring_falsely_detected) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("\\StateSpace is wide", &n, pkgs, 5);
+  detect_result res;
+  detect_packages("\\StateSpace is wide", &res);
   /* strstr matches \\State as prefix of \\StateSpace - this IS current behavior */
-  ASSERT_EQ(n, 1);
-  ASSERT_STREQ(pkgs[0], "algpseudocode");
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algpseudocode");
 }
 
 TEST(all_four_package_triggers_at_once) {
-  char pkgs[5][64];
-  int n;
+  detect_result res;
   detect_packages(
     "\\begin{algorithm}\n\\begin{algorithmic}\n"
-    "\\State x\n\\begin{tikzpicture}", &n, pkgs, 5);
-  ASSERT_EQ(n, 3);
-  ASSERT_STREQ(pkgs[0], "algpseudocode");
-  ASSERT_STREQ(pkgs[1], "algorithm");
-  ASSERT_STREQ(pkgs[2], "tikz");
+    "\\State x\n\\begin{tikzpicture}", &res);
+  ASSERT_EQ(res.n_pkgs, 4);
+  ASSERT_STREQ(res.pkgs[0], "algpseudocode");
+  ASSERT_STREQ(res.pkgs[1], "algorithm");
+  ASSERT_STREQ(res.pkgs[2], "float");
+  ASSERT_STREQ(res.pkgs[3], "tikz");
+  ASSERT_EQ(res.n_extra, 2);
+  ASSERT_STREQ(res.extra_preamble[0], "\\floatplacement{algorithm}{H}");
+  ASSERT_TRUE(strstr(res.extra_preamble[1], "\\newenvironment{algorithm}") != NULL);
+}
+
+TEST(algorithm_float_shim_extra_preamble) {
+  detect_result res;
+  detect_packages("\\begin{algorithm}", &res);
+  ASSERT_EQ(res.n_extra, 2);
+  ASSERT_STREQ(res.extra_preamble[0], "\\floatplacement{algorithm}{H}");
+  ASSERT_TRUE(strstr(res.extra_preamble[1], "\\newenvironment{algorithm}") != NULL);
+  /* packages include algorithm + float */
+  int has_algorithm = 0, has_float = 0;
+  for (int i = 0; i < res.n_pkgs; i++) {
+    if (strcmp(res.pkgs[i], "algorithm") == 0) has_algorithm = 1;
+    if (strcmp(res.pkgs[i], "float") == 0) has_float = 1;
+  }
+  ASSERT_EQ(has_algorithm, 1);
+  ASSERT_EQ(has_float, 1);
 }
 
 TEST(packages_with_max_one_slot) {
-  char pkgs[1][64];
-  int n;
-  detect_packages("\\begin{algorithmic} \\begin{tikzpicture}", &n, pkgs, 1);
-  ASSERT_EQ(n, 1);
-  ASSERT_STREQ(pkgs[0], "algpseudocode");
+  /* max param is gone; repurpose to assert internal bounds */
+  detect_result res;
+  detect_packages(
+    "\\begin{algorithmic} \\begin{tikzpicture} \\begin{algorithm} \\State",
+    &res);
+  ASSERT_TRUE(res.n_pkgs <= DETECT_MAX_PKGS);
+  ASSERT_TRUE(res.n_pkgs > 0);
 }
 
 TEST(packages_empty_fragment) {
-  char pkgs[5][64];
-  int n;
-  detect_packages("", &n, pkgs, 5);
-  ASSERT_EQ(n, 0);
+  detect_result res;
+  detect_packages("", &res);
+  ASSERT_EQ(res.n_pkgs, 0);
+}
+
+/* --- Uppercase algorithmic package selection --- */
+
+TEST(uppercase_STATE_with_begin_yields_algorithmic) {
+  detect_result res;
+  detect_packages(
+    "\\begin{algorithmic}\\STATE x\\end{algorithmic}", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+  /* never load algpseudocode when uppercase wins */
+  for (int i = 0; i < res.n_pkgs; i++)
+    ASSERT_TRUE(strcmp(res.pkgs[i], "algpseudocode") != 0);
+}
+
+TEST(uppercase_REQUIRE_with_begin_yields_algorithmic) {
+  detect_result res;
+  detect_packages(
+    "\\begin{algorithmic}\\REQUIRE x\\ENSURE y\\end{algorithmic}", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+}
+
+TEST(bare_RETURN_yields_algorithmic) {
+  detect_result res;
+  detect_packages("\\RETURN x", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+}
+
+TEST(uppercase_FOR_yields_algorithmic) {
+  detect_result res;
+  detect_packages("\\FOR{i} x \\ENDFOR", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+}
+
+TEST(uppercase_ENDIF_yields_algorithmic) {
+  detect_result res;
+  detect_packages("\\IF{c} \\ENDIF", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+}
+
+TEST(uppercase_WHILE_yields_algorithmic) {
+  detect_result res;
+  detect_packages("\\WHILE{c} \\ENDWHILE", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+}
+
+TEST(uppercase_ENSURE_yields_algorithmic) {
+  detect_result res;
+  detect_packages("\\ENSURE y", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+}
+
+TEST(mixed_STATE_and_State_yields_algorithmic_with_flag) {
+  detect_result res;
+  detect_packages("\\STATE x \\State y", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+  ASSERT_EQ(res.mixed_algo_styles, 1);
+}
+
+TEST(uppercase_only_mixed_flag_is_zero) {
+  detect_result res;
+  detect_packages("\\STATE x \\RETURN y", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algorithmic");
+  ASSERT_EQ(res.mixed_algo_styles, 0);
+}
+
+TEST(camelcase_only_mixed_flag_is_zero) {
+  detect_result res;
+  detect_packages("\\State x", &res);
+  ASSERT_EQ(res.n_pkgs, 1);
+  ASSERT_STREQ(res.pkgs[0], "algpseudocode");
+  ASSERT_EQ(res.mixed_algo_styles, 0);
 }
 
 TEST(begin_with_no_closing_brace) {

@@ -33,9 +33,30 @@ ltxpng [options] [FRAGMENT]
 - `-p, --preamble ARG` -- Extra preamble (repeatable; file path or verbatim)
 - `-m, --margin DIM` -- Whitespace border, a TeX dimension (default `2pt`)
 - `--inline` / `--display` / `--raw` -- Force wrapping mode
+- `--no-auto-packages` -- Skip automatic package detection (`-p` still honored)
 - `-k, --keep` -- Keep temp build dir and print its path
 - `-v, --verbose` -- Stream xelatex/gs output
 - `-h, --help`, `-V, --version`
+
+### Package auto-detection
+
+When the input is not a full document, ltxpng scans the fragment and loads
+packages automatically (unless `--no-auto-packages` is set):
+
+| Trigger | Package(s) |
+|---------|------------|
+| `\begin{tikzpicture}` | `tikz` |
+| `\begin{algorithm}` | `algorithm`, `float`, plus a float-to-inline shim |
+| Uppercase algorithmic commands (`\STATE`, `\REQUIRE`, `\FOR`, ...) | `algorithmic` |
+| CamelCase algorithmic commands (`\State`) or `\begin{algorithmic}` alone | `algpseudocode` |
+
+`algorithmic` and `algpseudocode` are mutually exclusive (loading both conflicts).
+If both uppercase and CamelCase styles appear in one fragment, uppercase wins and
+a warning is printed to stderr.
+
+The `\begin{algorithm}` float cannot be placed inside `standalone`/`varwidth`, so
+detection also injects `\floatplacement{algorithm}{H}` and redefines the
+environment as an in-place minipage so the fragment still renders.
 
 ### Examples
 
@@ -45,6 +66,9 @@ ltxpng 'E = mc^2' -o equation.png
 
 # Algorithmic code (auto-detects algpseudocode package)
 ltxpng '\begin{algorithmic} \State x = 1 \end{algorithmic}' -o algo.png
+
+# Old-style uppercase algorithmic (auto-detects algorithmic package)
+ltxpng '\begin{algorithmic} \STATE x = 1 \end{algorithmic}' -o algo.png
 
 # TikZ diagram (auto-detects tikz package)
 ltxpng '\begin{tikzpicture} \draw (0,0) circle (1); \end{tikzpicture}' -o circle.png

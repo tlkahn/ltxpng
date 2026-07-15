@@ -31,6 +31,15 @@ TEST(no_args_returns_defaults) {
   ASSERT_EQ(o.mode_override, -1);
   ASSERT_EQ(o.keep, 0);
   ASSERT_EQ(o.verbose, 0);
+  ASSERT_EQ(o.no_auto_packages, 0);
+  free(o.preamble);
+}
+
+TEST(no_auto_packages_flag) {
+  opts o;
+  char *args[] = {"ltxpng", "--no-auto-packages", NULL};
+  ASSERT_EQ(parse_test(2, args, &o), 0);
+  ASSERT_EQ(o.no_auto_packages, 1);
   free(o.preamble);
 }
 

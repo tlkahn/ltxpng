@@ -248,6 +248,32 @@ check "transparent high dpi" sh -c "
   xxd -p -l 8 '$T/thd.png' | grep -q '89504e470d0a1a0a'
 "
 
+# 31. --no-auto-packages still renders a plain fragment
+check "no-auto-packages plain fragment" sh -c "
+  '$LTPNG' --no-auto-packages 'E = mc^2' -o $T/noauto.png 2>/dev/null &&
+  xxd -p -l 8 '$T/noauto.png' | grep -q '89504e470d0a1a0a'
+"
+
+# 32. Uppercase algorithmic commands (algorithmic package, not algpseudocode)
+if kpsewhich algorithmic.sty >/dev/null 2>&1; then
+  # Write repro fragment outside the check subshell for clean quoting
+  cat > "$T/algo_uc.in" << 'EOF'
+\begin{algorithm}
+\caption{Hardware-Aware Prefix Scheduler}
+\begin{algorithmic}[1]
+\REQUIRE Active requests $r \in \{1, \ldots, R\}$
+\ENSURE Selected per-request prefix lengths $\ell_1^*, \ldots, \ell_R^*$
+\STATE Initialize states
+\RETURN $(\ell_1^*, \ldots, \ell_R^*)$
+\end{algorithmic}
+\end{algorithm}
+EOF
+  check "uppercase algorithmic package" sh -c "
+    '$LTPNG' -o $T/algo_uc.png < $T/algo_uc.in 2>/dev/null &&
+    xxd -p -l 8 '$T/algo_uc.png' | grep -q '89504e470d0a1a0a'
+  "
+fi
+
 echo ""
 echo "E2E: $pass passed, $fail failed"
 [ $fail -eq 0 ]

@@ -13,7 +13,6 @@
 #include <sys/stat.h>
 #include <libgen.h>
 
-#define MAX_AUTO_PKGS 16
 #define MAX_PREAMBLE_ITEMS 64
 
 static int check_tool(const char *name) {
@@ -113,12 +112,18 @@ int main(int argc, char *argv[]) {
   frag_kind kind = classify_fragment(fragment);
 
   /* Detect auto packages */
-  char auto_pkgs_buf[MAX_AUTO_PKGS][64];
-  const char *auto_pkgs[MAX_AUTO_PKGS];
+  detect_result det;
+  memset(&det, 0, sizeof(det));
+  const char *auto_pkgs[DETECT_MAX_PKGS];
   int n_auto = 0;
-  if (kind != FRAG_FULLDOC) {
-    detect_packages(fragment, &n_auto, auto_pkgs_buf, MAX_AUTO_PKGS);
-    for (int i = 0; i < n_auto; i++) auto_pkgs[i] = auto_pkgs_buf[i];
+  const char *extra_pre[DETECT_MAX_EXTRA];
+  int n_extra = 0;
+  if (kind != FRAG_FULLDOC && !o.no_auto_packages) {
+    detect_packages(fragment, &det);
+    for (int i = 0; i < det.n_pkgs; i++) auto_pkgs[n_auto++] = det.pkgs[i];
+    for (int i = 0; i < det.n_extra; i++) extra_pre[n_extra++] = det.extra_preamble[i];
+    if (det.mixed_algo_styles)
+      fprintf(stderr, "warning: both uppercase (algorithmic) and CamelCase (algpseudocode) commands detected; loading 'algorithmic'\n");
   }
 
   /* Resolve preamble args (files or verbatim) */
@@ -138,12 +143,20 @@ int main(int argc, char *argv[]) {
     n_resolved++;
   }
 
+  /* Combine auto extra-preamble lines with user preambles */
+  const char *all_preamble[MAX_PREAMBLE_ITEMS + DETECT_MAX_EXTRA];
+  int n_all = 0;
+  for (int i = 0; i < n_extra && n_all < (int)(sizeof(all_preamble)/sizeof(all_preamble[0])); i++)
+    all_preamble[n_all++] = extra_pre[i];
+  for (int i = 0; i < n_resolved && n_all < (int)(sizeof(all_preamble)/sizeof(all_preamble[0])); i++)
+    all_preamble[n_all++] = resolved_preambles[i];
+
   /* Build template */
   sb doc;
   sb_init(&doc);
   build_template(&doc, fragment, kind, o.margin, o.mode_override,
                  (const char **)auto_pkgs, n_auto,
-                 (const char **)resolved_preambles, n_resolved);
+                 all_preamble, n_all);
 
   /* Create temp dir */
   char *tmpdir = tmpdir_create();

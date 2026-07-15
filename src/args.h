@@ -12,6 +12,7 @@ typedef struct {
   int mode_override;      /* -1 auto, 0 inline, 1 display, 2 raw */
   int keep;               /* keep temp dir */
   int verbose;            /* show child output */
+  int no_auto_packages;   /* skip package auto-detection */
   char **preamble;        /* array of preamble strings */
   int n_preamble;         /* count */
 } opts;
